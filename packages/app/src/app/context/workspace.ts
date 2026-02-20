@@ -3,8 +3,14 @@ import { listen, type Event as TauriEvent } from "@tauri-apps/api/event";
 
 import type {
   Client,
+  DashboardTab,
   StartupPreference,
+  MessageWithParts,
+  ModelRef,
   OnboardingStep,
+  PendingPermission,
+  TodoItem,
+  View,
   WorkspaceDisplay,
   WorkspaceOpenworkConfig,
   WorkspacePreset,
@@ -127,19 +133,19 @@ export function createWorkspaceStore(options: {
   selectedSessionId: () => string | null;
   selectSession: (id: string) => Promise<void>;
   setSelectedSessionId: (value: string | null) => void;
-  setMessages: (value: any[]) => void;
-  setTodos: (value: any[]) => void;
-  setPendingPermissions: (value: any[]) => void;
+  setMessages: (value: MessageWithParts[]) => void;
+  setTodos: (value: TodoItem[]) => void;
+  setPendingPermissions: (value: PendingPermission[]) => void;
   setSessionStatusById: (value: Record<string, string>) => void;
-  defaultModel: () => any;
+  defaultModel: () => ModelRef;
   modelVariant: () => string | null;
   refreshSkills: (options?: { force?: boolean }) => Promise<void>;
   refreshPlugins: () => Promise<void>;
   engineSource: () => "path" | "sidecar" | "custom";
   engineCustomBinPath?: () => string;
   setEngineSource: (value: "path" | "sidecar" | "custom") => void;
-  setView: (value: any) => void;
-  setTab: (value: any) => void;
+  setView: (value: View) => void;
+  setTab: (value: DashboardTab) => void;
   isWindowsPlatform: () => boolean;
   openworkServerSettings: () => OpenworkServerSettings;
   updateOpenworkServerSettings: (next: OpenworkServerSettings) => void;
@@ -1544,7 +1550,7 @@ export function createWorkspaceStore(options: {
       try {
         stopListen = await listen(
           "openwork://sandbox-create-progress",
-          (event: TauriEvent<{ runId?: string; stage?: string; message?: string; payload?: any }>) => {
+          (event: TauriEvent<{ runId?: string; stage?: string; message?: string; payload?: Record<string, unknown> }>) => {
             const payload = event.payload ?? {};
             if ((payload.runId ?? "").trim() !== runId) return;
             const stage = String(payload.stage ?? "").trim();

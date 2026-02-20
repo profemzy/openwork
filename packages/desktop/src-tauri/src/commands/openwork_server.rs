@@ -4,12 +4,14 @@ use crate::openwork_server::manager::OpenworkServerManager;
 use crate::types::OpenworkServerInfo;
 
 #[tauri::command]
-pub fn openwork_server_info(manager: State<OpenworkServerManager>) -> OpenworkServerInfo {
+pub fn openwork_server_info(
+    manager: State<OpenworkServerManager>,
+) -> Result<OpenworkServerInfo, String> {
     let mut state = manager
         .inner
         .lock()
-        .expect("openwork server mutex poisoned");
-    OpenworkServerManager::snapshot_locked(&mut state)
+        .map_err(|_| "openwork server state unavailable".to_string())?;
+    Ok(OpenworkServerManager::snapshot_locked(&mut state))
 }
 
 // start/stop are handled by engine lifecycle

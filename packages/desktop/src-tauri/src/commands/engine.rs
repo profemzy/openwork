@@ -61,8 +61,11 @@ struct OutputState {
 pub fn engine_info(
     manager: State<EngineManager>,
     orchestrator_manager: State<OrchestratorManager>,
-) -> EngineInfo {
-    let mut state = manager.inner.lock().expect("engine mutex poisoned");
+) -> Result<EngineInfo, String> {
+    let mut state = manager
+        .inner
+        .lock()
+        .map_err(|_| "engine state unavailable".to_string())?;
     if state.runtime == EngineRuntime::Orchestrator {
         let data_dir = orchestrator_manager
             .inner
@@ -107,7 +110,7 @@ pub fn engine_info(
                 .and_then(|auth| auth.opencode_password.clone())
         });
         let project_dir = project_dir.or_else(|| auth_snapshot.and_then(|auth| auth.project_dir));
-        return EngineInfo {
+        return Ok(EngineInfo {
             running: status.running,
             runtime: state.runtime.clone(),
             base_url,
@@ -119,9 +122,9 @@ pub fn engine_info(
             pid: opencode.as_ref().map(|entry| entry.pid),
             last_stdout,
             last_stderr,
-        };
+        });
     }
-    EngineManager::snapshot_locked(&mut state)
+    Ok(EngineManager::snapshot_locked(&mut state))
 }
 
 #[tauri::command]
@@ -130,8 +133,11 @@ pub fn engine_stop(
     orchestrator_manager: State<OrchestratorManager>,
     openwork_manager: State<OpenworkServerManager>,
     opencode_router_manager: State<OpenCodeRouterManager>,
-) -> EngineInfo {
-    let mut state = manager.inner.lock().expect("engine mutex poisoned");
+) -> Result<EngineInfo, String> {
+    let mut state = manager
+        .inner
+        .lock()
+        .map_err(|_| "engine state unavailable".to_string())?;
     if let Ok(mut orchestrator_state) = orchestrator_manager.inner.lock() {
         OrchestratorManager::stop_locked(&mut orchestrator_state);
     }
@@ -142,7 +148,7 @@ pub fn engine_stop(
     if let Ok(mut opencode_router_state) = opencode_router_manager.inner.lock() {
         OpenCodeRouterManager::stop_locked(&mut opencode_router_state);
     }
-    EngineManager::snapshot_locked(&mut state)
+    Ok(EngineManager::snapshot_locked(&mut state))
 }
 
 #[tauri::command]
@@ -294,7 +300,10 @@ pub fn engine_start(
         None
     };
 
-    let mut state = manager.inner.lock().expect("engine mutex poisoned");
+    let mut state = manager
+        .inner
+        .lock()
+        .map_err(|_| "engine state unavailable".to_string())?;
     EngineManager::stop_locked(&mut state);
     if let Ok(mut orchestrator_state) = orchestrator_manager.inner.lock() {
         OrchestratorManager::stop_locked(&mut orchestrator_state);

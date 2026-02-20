@@ -393,18 +393,18 @@ export default function PartView(props: Props) {
     return "text" in p() ? String((p() as { text: string }).text ?? "") : "";
   });
   const throttledMarkdownSource = useThrottledValue(markdownSource, markdownThrottleMs);
+  const memoizedRenderer = createMemo(() => createCustomRenderer(tone()));
   const renderedMarkdown = createMemo(() => {
     if (!renderMarkdown() || p().type !== "text") return null;
     const text = throttledMarkdownSource();
     if (!text.trim()) return "";
-    
+
     try {
       const startedAt = perfNow();
-      const renderer = createCustomRenderer(tone());
-      const result = marked.parse(text, { 
-        breaks: true, 
+      const result = marked.parse(text, {
+        breaks: true,
         gfm: true,
-        renderer,
+        renderer: memoizedRenderer(),
         async: false
       });
       const parseMs = Math.round((perfNow() - startedAt) * 100) / 100;

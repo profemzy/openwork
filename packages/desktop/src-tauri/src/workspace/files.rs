@@ -487,8 +487,12 @@ pub fn ensure_workspace_files(workspace_path: &str, preset: &str) -> Result<(), 
     if !openwork_path.exists() {
         let openwork = WorkspaceOpenworkConfig::new(workspace_path, preset, now_ms());
 
-        fs::create_dir_all(openwork_path.parent().unwrap())
-            .map_err(|e| format!("Failed to create {}: {e}", openwork_path.display()))?;
+        fs::create_dir_all(
+            openwork_path
+                .parent()
+                .ok_or_else(|| format!("Invalid path: {}", openwork_path.display()))?,
+        )
+        .map_err(|e| format!("Failed to create {}: {e}", openwork_path.display()))?;
 
         fs::write(
             &openwork_path,

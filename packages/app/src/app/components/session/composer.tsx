@@ -282,9 +282,8 @@ const insertTextWithBreaks = (target: HTMLElement, text: string) => {
 const sanitizePastedPlainText = (value: string) => normalizeText(value).replace(/\r\n?/g, "\n");
 
 const htmlToPlainText = (html: string) => {
-  const div = document.createElement("div");
-  div.innerHTML = html;
-  return div.innerText ?? "";
+  const doc = new DOMParser().parseFromString(html, "text/html");
+  return doc.body.textContent ?? "";
 };
 
 const countLines = (value: string) => (value ? value.split("\n").length : 0);
