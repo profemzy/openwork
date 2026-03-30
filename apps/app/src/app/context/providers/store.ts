@@ -1,6 +1,11 @@
 import { createMemo, createSignal, type Accessor } from "solid-js";
 
-import type { ProviderAuthAuthorization, ProviderListResponse } from "@opencode-ai/sdk/v2/client";
+import type {
+  Auth,
+  ConfigProvidersResponse,
+  ProviderAuthAuthorization,
+  ProviderListResponse,
+} from "@opencode-ai/sdk/v2/client";
 
 import { unwrap, waitForHealthy } from "../../lib/opencode";
 import type { Client, ProviderListItem, WorkspaceDisplay } from "../../types";
@@ -52,6 +57,58 @@ export function createProvidersStore(options: CreateProvidersStoreOptions) {
     options.setProviders(value.all ?? []);
     options.setProviderDefaults(value.default ?? {});
     options.setProviderConnectedIds(value.connected ?? []);
+  };
+
+  const normalizeProviderId = (value: string) => value.trim().toLowerCase();
+
+  const isAzureProvider = (providerId: string) => {
+    const normalized = normalizeProviderId(providerId);
+    return normalized === "azure" || normalized.startsWith("azure/");
+  };
+
+  const asRecord = (value: unknown): Record<string, unknown> | null =>
+    value && typeof value === "object" && !Array.isArray(value)
+      ? (value as Record<string, unknown>)
+      : null;
+
+  const readRecordString = (record: Record<string, unknown> | null, key: string) => {
+    const value = record?.[key];
+    return typeof value === "string" && value.trim() ? value.trim() : null;
+  };
+
+  const deriveAzureResourceName = (baseURL: string | null) => {
+    if (!baseURL) return null;
+    try {
+      const url = new URL(baseURL);
+      const [subdomain = ""] = url.hostname.split(".");
+      return subdomain.trim() || null;
+    } catch {
+      return null;
+    }
+  };
+
+  const deriveAzureBaseURL = (resourceName: string | null) =>
+    resourceName ? `https://${resourceName}.openai.azure.com/openai/v1` : null;
+
+  const loadAzureAuthSettings = async (providerId: string) => {
+    const c = options.client();
+    if (!c) {
+      throw new Error("Not connected to a server");
+    }
+
+    const config = unwrap(await c.config.providers()) as ConfigProvidersResponse;
+    const provider = config.providers.find(
+      (entry) => normalizeProviderId(entry.id ?? "") === normalizeProviderId(providerId),
+    );
+    const providerRecord = asRecord(provider);
+    const providerOptions = asRecord(providerRecord?.options);
+    const configuredBaseURL =
+      readRecordString(providerOptions, "baseURL") ?? readRecordString(providerOptions, "baseUrl");
+    const configuredResourceName = readRecordString(providerOptions, "resourceName");
+    const resourceName = configuredResourceName ?? deriveAzureResourceName(configuredBaseURL);
+    const baseURL = configuredBaseURL ?? deriveAzureBaseURL(resourceName);
+
+    return { resourceName, baseURL };
   };
 
   const removeProviderFromState = (providerId: string) => {
@@ -391,12 +448,33 @@ export function createProvidersStore(options: CreateProvidersStoreOptions) {
     }
 
     try {
+      const resolvedProviderId = providerId.trim();
+      const authPayload: Extract<Auth, { type: "api" }> & Record<string, unknown> = {
+        type: "api",
+        key: trimmed,
+      };
+
+      if (isAzureProvider(resolvedProviderId)) {
+        const azureSettings = await loadAzureAuthSettings(resolvedProviderId);
+        if (!azureSettings.resourceName) {
+          throw new Error(
+            "Azure OpenAI is missing a resource name in the current OpenWork/OpenCode provider config. " +
+              "Add `provider.azure.options.resourceName` or `provider.azure.options.baseURL`, then try again.",
+          );
+        }
+
+        authPayload.resourceName = azureSettings.resourceName;
+        if (azureSettings.baseURL) {
+          authPayload.baseURL = azureSettings.baseURL;
+        }
+      }
+
       await c.auth.set({
-        providerID: providerId,
-        auth: { type: "api", key: trimmed },
+        providerID: resolvedProviderId,
+        auth: authPayload,
       });
       await refreshProviders({ dispose: true });
-      return `Connected ${providerId}`;
+      return `Connected ${resolvedProviderId}`;
     } catch (error) {
       const message = describeProviderError(error, "Failed to save API key");
       setProviderAuthError(message);
